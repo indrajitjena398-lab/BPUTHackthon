@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+
+# Next.js build output
+.next/
+**/.next/
+out/
+**/out/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+**/.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Local databases & logs
+*.db
+*.log
+.env.local
+
+# OS
+Thumbs.db
+.DS_Store
