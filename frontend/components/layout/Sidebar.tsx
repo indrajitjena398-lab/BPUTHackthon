@@ -22,6 +22,7 @@ import { getCurrentUser, switchDemoRole, UserProfile } from "@/lib/api";
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Threat Detection", href: "/threat-detection", icon: ScanSearch },
+  { name: "Threat Log & Audit", href: "/threats", icon: ShieldAlert },
   { name: "Incidents", href: "/incidents", icon: AlertTriangle },
   { name: "Threat Intelligence", href: "/threat-intelligence", icon: Database },
   { name: "Attack Graph", href: "/attack-graph", icon: Network },
