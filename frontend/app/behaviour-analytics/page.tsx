@@ -88,6 +88,11 @@ const ANOMALY_CHART_DATA = [
 
 export default function BehaviourAnalyticsPage() {
   const [selectedUser, setSelectedUser] = useState("cfo@enterprise.com");
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -199,17 +204,23 @@ export default function BehaviourAnalyticsPage() {
         </div>
 
         <div className="h-60 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={ANOMALY_CHART_DATA} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-              <XAxis dataKey="hour" stroke="#94a3b8" fontSize={11} tickLine={false} />
-              <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#ffffff", borderColor: "#e2e8f0", borderRadius: "8px", fontSize: "12px" }}
-              />
-              <Bar dataKey="normal" fill="#3b82f6" name="Normal Logins" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="anomaly" fill="#ef4444" name="Anomalies Flagged" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {mounted ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={ANOMALY_CHART_DATA} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <XAxis dataKey="hour" stroke="#94a3b8" fontSize={11} tickLine={false} />
+                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#ffffff", borderColor: "#e2e8f0", borderRadius: "8px", fontSize: "12px" }}
+                />
+                <Bar dataKey="normal" fill="#3b82f6" name="Normal Logins" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="anomaly" fill="#ef4444" name="Anomalies Flagged" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full w-full flex items-center justify-center text-slate-400 text-xs">
+              Loading anomaly velocity chart...
+            </div>
+          )}
         </div>
       </div>
 
