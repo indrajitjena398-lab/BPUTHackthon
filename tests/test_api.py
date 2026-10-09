@@ -93,6 +93,25 @@ def test_analyze_genai_phishing_endpoint():
     assert "ai_generated_probability" in data
     assert "stylometric_metrics" in data
 
+def test_analyze_steganography_endpoint():
+    carrier_bytes = (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR\x00\x00\x00\x10\x00\x00\x00\x10\x08\x02\x00\x00\x00\x90\x91\x68\x36"
+        b"\x00\x00\x00\x00IEND\xae\x42\x60\x82"
+        b"STEG_C2_OVERLAY: http://bput-c2-tunnel.darknet-relay.top/beacon/exfil.php"
+    )
+    res = client.post(
+        "/api/analyze/steganography",
+        files={"file": ("memo_stego.png", io.BytesIO(carrier_bytes), "image/png")}
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["is_steganography"] is True
+    assert data["risk_score"] >= 80
+    assert len(data["recovered_urls"]) >= 1
+    assert "http://bput-c2-tunnel.darknet-relay.top/beacon/exfil.php" in data["recovered_urls"]
+    assert "forensic_details" in data
+
 def test_incidents_lifecycle():
     res = client.post("/api/incidents", json={
         "title": "Suspected API Key Exfiltration",

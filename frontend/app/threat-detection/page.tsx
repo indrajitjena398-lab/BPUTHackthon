@@ -18,7 +18,12 @@ import {
   ShieldAlert,
   RefreshCw,
   FileText,
-  Building
+  Building,
+  Layers,
+  EyeOff,
+  ExternalLink,
+  FileCode,
+  Binary
 } from "lucide-react";
 import {
   analyzeEmail,
@@ -27,10 +32,11 @@ import {
   analyzeNetwork,
   analyzeMedia,
   analyzeQuishing,
-  analyzeGenAI
+  analyzeGenAI,
+  analyzeSteganography
 } from "@/lib/api";
 
-type TabType = "email" | "url" | "quishing" | "genai" | "media" | "behavior" | "network";
+type TabType = "email" | "quishing" | "stego" | "genai" | "url" | "media" | "behavior" | "network";
 
 export default function ThreatDetectionPage() {
   const [activeTab, setActiveTab] = useState<TabType>("email");
@@ -53,6 +59,10 @@ export default function ThreatDetectionPage() {
   const [genAiText, setGenAiText] = useState(
     "Kindly be advised that it has come to our attention that your institutional credentials require immediate re-validation. In accordance with university cybersecurity policy, failure to comply within 24 hours will result in administrative account termination. Please be reminded that prompt action is imperative to ensure uninterrupted access."
   );
+
+  // Steganography file state
+  const [stegoFile, setStegoFile] = useState<File | null>(null);
+  const [stegoFileName, setStegoFileName] = useState<string>("Sample Carrier Image");
 
   // Behavior form state
   const [behaviorForm, setBehaviorForm] = useState({
@@ -78,14 +88,44 @@ export default function ThreatDetectionPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [mediaType, setMediaType] = useState<"image" | "audio" | "video">("image");
 
-  // 1-Click Preset Scenario Bench (Comprehensive Coverage)
+  // Helpers to generate sample carrier payloads on demand
+  const createSampleStegoFile = (isMalicious: boolean = true): File => {
+    if (isMalicious) {
+      const header = new Uint8Array([
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG Header
+        0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
+        0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, // 16x16
+        0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x91, 0x68,
+        0x36, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, // IEND
+        0x44, 0xAE, 0x42, 0x60, 0x82
+      ]);
+      const payload = new TextEncoder().encode(
+        "STEG_CARRIER_C2_PAYLOAD: C2_HOST=http://bput-c2-tunnel.darknet-relay.top/beacon/exfil.php PROTOCOL=HTTPS AUTH_TOKEN=d7a98b2c4e1f"
+      );
+      const combined = new Uint8Array(header.length + payload.length);
+      combined.set(header, 0);
+      combined.set(payload, header.length);
+      return new File([combined], "carrier_exam_notice_stego.png", { type: "image/png" });
+    } else {
+      const cleanBytes = new Uint8Array([
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+        0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10,
+        0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x91, 0x68,
+        0x36, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+        0x44, 0xAE, 0x42, 0x60, 0x82
+      ]);
+      return new File([cleanBytes], "verified_clean_logo.png", { type: "image/png" });
+    }
+  };
+
+  // 1-Click Preset Scenario Bench
   const loadScenario = async (scenarioNumber: number) => {
     setLoading(true);
     setResult(null);
 
     try {
       if (scenarioNumber === 1) {
-        // Phishing Scenario
         setActiveTab("email");
         const payload = {
           subject: "URGENT: Your Account Has Been Suspended",
@@ -105,7 +145,6 @@ export default function ThreatDetectionPage() {
         setResult(res);
 
       } else if (scenarioNumber === 2) {
-        // BEC Impersonation & Deepfake
         setActiveTab("email");
         const payload = {
           subject: "CONFIDENTIAL: Urgent Wire Authorization - Satya Nadella",
@@ -125,7 +164,6 @@ export default function ThreatDetectionPage() {
         setResult(res);
 
       } else if (scenarioNumber === 3) {
-        // Account Takeover / Impossible Travel
         setActiveTab("behavior");
         const payload = {
           user_email: "cfo@enterprise.com",
@@ -140,7 +178,6 @@ export default function ThreatDetectionPage() {
         setResult(res);
 
       } else if (scenarioNumber === 4) {
-        // Network DNS Tunneling
         setActiveTab("network");
         const payload = {
           source_ip: "10.14.80.114",
@@ -155,7 +192,6 @@ export default function ThreatDetectionPage() {
         setResult(res);
 
       } else if (scenarioNumber === 5) {
-        // University / Academic Authority Impersonation (BPUT VC notice scam)
         setActiveTab("email");
         const payload = {
           subject: "Official Notice: Mandatory Semester Examination Clearance Fee",
@@ -175,16 +211,23 @@ export default function ThreatDetectionPage() {
         setResult(res);
 
       } else if (scenarioNumber === 6) {
-        // QR-Code Quishing Simulation
         setActiveTab("quishing");
-        // Create dummy QR png blob
         const fakeBlob = new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], { type: "image/png" });
         const fakeFile = new File([fakeBlob], "quishing_notice_flyer.png", { type: "image/png" });
         const res = await analyzeQuishing(fakeFile);
         setResult(res);
+
+      } else if (scenarioNumber === 7) {
+        setActiveTab("stego");
+        const carrierFile = createSampleStegoFile(true);
+        setStegoFile(carrierFile);
+        setStegoFileName("carrier_exam_notice_stego.png");
+        const res = await analyzeSteganography(carrierFile);
+        setResult(res);
       }
     } catch (e) {
       console.error(e);
+      alert("Error running scenario: " + e);
     } finally {
       setLoading(false);
     }
@@ -196,7 +239,7 @@ export default function ThreatDetectionPage() {
 
     try {
       if (activeTab === "email") {
-        const links = emailForm.links ? emailForm.links.split(",").map((l) => l.trim()) : [];
+        const links = emailForm.links ? [emailForm.links] : [];
         const res = await analyzeEmail({
           subject: emailForm.subject,
           sender: emailForm.sender,
@@ -211,23 +254,21 @@ export default function ThreatDetectionPage() {
         setResult(res);
 
       } else if (activeTab === "quishing") {
-        if (!selectedFile) {
-          // Use simulated flyer file if none uploaded
-          const fakeBlob = new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" });
-          const fileToUse = new File([fakeBlob], "quishing_test_poster.png", { type: "image/png" });
-          const res = await analyzeQuishing(fileToUse);
-          setResult(res);
-        } else {
-          const res = await analyzeQuishing(selectedFile);
-          setResult(res);
-        }
+        const fileToUse = selectedFile || new File([new Uint8Array([137, 80, 78, 71])], "quishing_test_poster.png", { type: "image/png" });
+        const res = await analyzeQuishing(fileToUse);
+        setResult(res);
+
+      } else if (activeTab === "stego") {
+        const fileToUse = stegoFile || createSampleStegoFile(true);
+        const res = await analyzeSteganography(fileToUse);
+        setResult(res);
 
       } else if (activeTab === "genai") {
         const res = await analyzeGenAI(genAiText);
         setResult({
           classification: res.forensic_label,
           probability: res.ai_generated_probability,
-          risk_score: intRiskScore(res.ai_generated_probability),
+          risk_score: Math.round(res.ai_generated_probability * 100),
           risk_level: res.is_likely_ai_generated ? "HIGH" : "LOW",
           confidence: 0.94,
           indicators: res.indicators,
@@ -248,11 +289,22 @@ export default function ThreatDetectionPage() {
         setResult(res);
 
       } else if (activeTab === "media") {
-        if (!selectedFile) {
-          alert("Please select a media file to upload for forensic analysis");
-          return;
+        // Robust fallback: if user has not selected a local file, generate sample media bytes
+        let fileToUse = selectedFile;
+        if (!fileToUse) {
+          if (mediaType === "image") {
+            const fakeImg = new Blob([new Uint8Array([255, 216, 255, 224, 0, 16, 74, 70, 73, 70])], { type: "image/jpeg" });
+            fileToUse = new File([fakeImg], "synthetic_face_deepfake.jpg", { type: "image/jpeg" });
+          } else if (mediaType === "audio") {
+            const fakeAudio = new Blob([new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 87, 65, 86, 69])], { type: "audio/wav" });
+            fileToUse = new File([fakeAudio], "synthetic_voice_clone.wav", { type: "audio/wav" });
+          } else {
+            const fakeVideo = new Blob([new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112])], { type: "video/mp4" });
+            fileToUse = new File([fakeVideo], "synthetic_video_deepfake.mp4", { type: "video/mp4" });
+          }
         }
-        const res = await analyzeMedia(selectedFile, mediaType);
+
+        const res = await analyzeMedia(fileToUse, mediaType);
         setResult({
           classification: res.status_label,
           probability: res.manipulation_probability,
@@ -272,8 +324,6 @@ export default function ThreatDetectionPage() {
     }
   };
 
-  const intRiskScore = (prob: number) => Math.round(prob * 100);
-
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       {/* Header */}
@@ -281,7 +331,7 @@ export default function ThreatDetectionPage() {
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">Multi-Source Threat Ingestion & AI Detection</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Unified detection workbench: Email, SMS, Quishing QR, GenAI Phishing, URL, Deepfakes, Behavior & Network logs.
+            Unified detection workbench: Email, SMS, Quishing QR, Steganography, GenAI Phishing, URL, Deepfakes, Behavior & Network logs.
           </p>
         </div>
 
@@ -292,17 +342,17 @@ export default function ThreatDetectionPage() {
         </div>
       </div>
 
-      {/* 1-Click Preset Scenario Buttons (Expanded with Academic & Quishing Scenarios) */}
+      {/* 1-Click Preset Scenario Buttons (7 Problem Statement Benchmarks) */}
       <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs">
         <div className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <Zap className="w-3.5 h-3.5 text-blue-600" />
             <span>1-Click Test Scenarios (Problem Statement Benchmarks)</span>
           </div>
-          <span className="text-[10px] text-slate-400 font-normal">All 6 Key Problem Statement Scenarios</span>
+          <span className="text-[10px] text-slate-400 font-normal">7 Core Attack Vectors</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2">
           <button
             onClick={() => loadScenario(1)}
             className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 transition-colors"
@@ -335,15 +385,22 @@ export default function ThreatDetectionPage() {
             onClick={() => loadScenario(5)}
             className="text-left p-2.5 rounded-lg border border-purple-200 bg-purple-50/20 hover:border-purple-400 hover:bg-purple-50/50 transition-colors"
           >
-            <div className="text-xs font-bold text-purple-900">5. University Masquerade</div>
-            <div className="text-[10px] text-purple-600 mt-0.5">BPUT VC exam notice scam</div>
+            <div className="text-xs font-bold text-purple-900">5. University VC Scam</div>
+            <div className="text-[10px] text-purple-600 mt-0.5">BPUT exam clearance fee</div>
           </button>
           <button
             onClick={() => loadScenario(6)}
             className="text-left p-2.5 rounded-lg border border-indigo-200 bg-indigo-50/20 hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors"
           >
             <div className="text-xs font-bold text-indigo-900">6. Visual Quishing</div>
-            <div className="text-[10px] text-indigo-600 mt-0.5">CV QR barcode flyer attack</div>
+            <div className="text-[10px] text-indigo-600 mt-0.5">CV QR barcode matrix</div>
+          </button>
+          <button
+            onClick={() => loadScenario(7)}
+            className="text-left p-2.5 rounded-lg border border-emerald-200 bg-emerald-50/25 hover:border-emerald-400 hover:bg-emerald-50/60 transition-colors"
+          >
+            <div className="text-xs font-bold text-emerald-900">7. Image Stego C2</div>
+            <div className="text-[10px] text-emerald-700 mt-0.5">Hidden link under image</div>
           </button>
         </div>
       </div>
@@ -371,6 +428,15 @@ export default function ThreatDetectionPage() {
             >
               <QrCode className="w-3.5 h-3.5" />
               <span>QR Quishing</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("stego")}
+              className={`flex items-center gap-1.5 pb-3 px-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === "stego" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Steganography</span>
             </button>
             <button
               onClick={() => setActiveTab("genai")}
@@ -476,8 +542,8 @@ export default function ThreatDetectionPage() {
             {activeTab === "quishing" && (
               <div className="space-y-4">
                 <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-900">
-                  <span className="font-bold">Quishing (QR-Code Phishing) Computer Vision Detector: </span>
-                  Adversaries increasingly embed QR codes into flyers, physical posters, or PDF invoices to bypass standard email textual filtering. CyberGuard extracts the visual QR matrix using OpenCV, decodes the hidden destination URI, and performs deep domain reputation analysis.
+                  <span className="font-bold">Quishing (QR Phishing) Visual Matrix Inspector: </span>
+                  Adversaries embed 2D QR barcodes in PDF attachments or flyers to bypass text email filters. CyberGuard decodes the matrix using OpenCV and analyzes destination URLs.
                 </div>
                 <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center bg-slate-50/50 hover:bg-slate-50 transition-colors">
                   <input
@@ -487,7 +553,62 @@ export default function ThreatDetectionPage() {
                     className="text-xs text-slate-600"
                   />
                   <p className="text-[11px] text-slate-400 mt-2">
-                    Upload image with embedded QR code (PNG, JPG). If none selected, the scanner will execute with test quishing telemetry.
+                    Upload image with embedded QR code. If none chosen, test quishing matrix payload will run automatically.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "stego" && (
+              <div className="space-y-4">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-950">
+                  <span className="font-bold">Steganography & Layered Image Forensics: </span>
+                  Inspects images for hidden links, covert Command & Control (C2) URLs, appended EOF overlays (file carving for hidden ZIPs/EXEs), LSB (Least Significant Bit) bit-plane entropy anomalies, and obfuscated EXIF/PNG chunks.
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const f = createSampleStegoFile(true);
+                      setStegoFile(f);
+                      setStegoFileName(f.name);
+                    }}
+                    className="px-2.5 py-1.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors"
+                  >
+                    <Binary className="w-3.5 h-3.5" />
+                    Load Sample Stego Carrier (Embedded C2 Link)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const f = createSampleStegoFile(false);
+                      setStegoFile(f);
+                      setStegoFileName(f.name);
+                    }}
+                    className="px-2.5 py-1.5 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg flex items-center gap-1.5 transition-colors"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    Load Clean Reference Image
+                  </button>
+                </div>
+
+                <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setStegoFile(file);
+                      if (file) setStegoFileName(file.name);
+                    }}
+                    className="text-xs text-slate-600"
+                  />
+                  <div className="text-[11px] text-slate-500 mt-2 font-mono">
+                    Selected Image: <span className="font-semibold text-slate-800">{stegoFileName}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Supports PNG, JPEG, GIF, BMP, WEBP. Scans for trailing bytes past EOF, LSB plane Shannon entropy, and concealed URLs.
                   </p>
                 </div>
               </div>
@@ -552,7 +673,7 @@ export default function ThreatDetectionPage() {
                     className="text-xs text-slate-600"
                   />
                   <p className="text-[11px] text-slate-400 mt-2">
-                    Upload sample {mediaType} (JPG, PNG, WAV, MP4) for Error Level Analysis (ELA) & spectral verification.
+                    Upload sample {mediaType} (JPG, PNG, WAV, MP4) for Error Level Analysis (ELA) & spectral verification. If none selected, test sample executes automatically.
                   </p>
                 </div>
               </div>
@@ -729,13 +850,77 @@ export default function ThreatDetectionPage() {
                 <div className="text-sm font-bold text-slate-900 mt-0.5">{result.classification}</div>
               </div>
 
+              {/* Steganography Recovered Concealed URLs / C2 Targets Card */}
+              {result.recovered_urls && result.recovered_urls.length > 0 && (
+                <div className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-xl space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-rose-900">
+                    <ExternalLink className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Recovered Concealed Link(s) / C2 Targets</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {result.recovered_urls.map((u: string, idx: number) => (
+                      <div key={idx} className="bg-white border border-rose-200/80 rounded-lg p-2 text-xs font-mono break-all text-rose-800 shadow-2xs flex items-center justify-between gap-2">
+                        <span>{u}</span>
+                        <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded shrink-0">
+                          Covert Target
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Steganography Forensic Layers Card */}
+              {result.forensic_details && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                    <Layers className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Forensic Layer Breakdown</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="bg-white p-2 rounded border border-slate-200">
+                      <span className="text-slate-400 block">EOF Appended Overlay:</span>
+                      <span className="font-semibold text-slate-800">
+                        {result.forensic_details.eof_overlay_detected
+                          ? `${result.forensic_details.eof_overlay_bytes} bytes detected`
+                          : "None (Clean EOF)"}
+                      </span>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-slate-200">
+                      <span className="text-slate-400 block">LSB Bitplane Entropy:</span>
+                      <span className="font-semibold text-slate-800">
+                        {result.forensic_details.lsb_r_entropy !== undefined
+                          ? `H = ${result.forensic_details.lsb_r_entropy}`
+                          : "Normal"}
+                      </span>
+                    </div>
+                    {result.forensic_details.image_format && (
+                      <div className="bg-white p-2 rounded border border-slate-200">
+                        <span className="text-slate-400 block">Format & Dimensions:</span>
+                        <span className="font-semibold text-slate-800 font-mono">
+                          {result.forensic_details.image_format} ({result.forensic_details.dimensions || "N/A"})
+                        </span>
+                      </div>
+                    )}
+                    {result.forensic_details.sha256 && (
+                      <div className="bg-white p-2 rounded border border-slate-200">
+                        <span className="text-slate-400 block">SHA-256 Digest:</span>
+                        <span className="font-mono text-[9px] text-slate-700 truncate block">
+                          {result.forensic_details.sha256.slice(0, 16)}...
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Explainable AI Evidence Checklist */}
               <div>
                 <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">
                   Why was this detected? (XAI Evidence Checklist)
                 </span>
                 <div className="space-y-1.5 bg-slate-50/50 p-3 rounded-lg border border-slate-100 max-h-48 overflow-y-auto">
-                  {result.indicators.map((ind: string, idx: number) => (
+                  {(result.indicators || []).map((ind: string, idx: number) => (
                     <div key={idx} className="flex items-start gap-2 text-xs text-slate-700">
                       <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
                       <span>{ind}</span>

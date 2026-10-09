@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.schemas import (
     EmailAnalysisRequest, UrlAnalysisRequest, BehavioralLogRequest,
-    NetworkLogRequest, EventCreate, DetectionResultOutput, DeepfakeAnalysisOutput
+    NetworkLogRequest, EventCreate, DetectionResultOutput, DeepfakeAnalysisOutput,
+    SteganographyAnalysisOutput
 )
 from app.models.sql_models import Threat, Incident, Event, Evidence, AuditLog
 from app.detectors.phishing_detector import phishing_detector
@@ -16,6 +17,7 @@ from app.detectors.behavior_detector import behavior_detector
 from app.detectors.network_detector import network_detector
 from app.detectors.quishing_detector import quishing_detector
 from app.detectors.ai_generated_phishing_detector import ai_phishing_detector
+from app.detectors.steganography_detector import steganography_detector
 from app.risk.fusion_engine import fusion_engine
 
 from app.explainability.xai_service import xai_service
@@ -450,5 +452,44 @@ async def analyze_quishing(
 @router.post("/genai-phishing")
 def analyze_genai_phishing(text: str = Form(...)):
     res = ai_phishing_detector.analyze(text)
+    return res
+
+@router.post("/steganography", response_model=SteganographyAnalysisOutput)
+async def analyze_steganography(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    contents = await file.read()
+    if len(contents) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size exceeds limit of 25MB")
+
+    res = steganography_detector.analyze_image_bytes(contents, filename=file.filename or "stego_sample.png")
+
+    if res.get("is_steganography") or res.get("risk_score", 0) >= 60:
+        fused_equiv = {
+            "classification": res["classification"],
+            "risk_score": res["risk_score"],
+            "risk_level": res["risk_level"],
+            "confidence": res["confidence"],
+            "indicators": res["indicators"],
+            "explanation": res["explanation"],
+            "recommended_actions": res["recommended_actions"],
+            "mitre_mappings": res.get("mitre_mappings", [])
+        }
+        threat = _persist_threat_and_incident(
+            db,
+            category="Steganography & Hidden Payload Carrier",
+            fusion_result=fused_equiv,
+            affected_user="Digital Forensics Ingestion / User Attachment",
+            affected_asset="Perimeter Content Filter / Media Storage"
+        )
+        await ws_manager.broadcast({
+            "type": "NEW_THREAT_DETECTED",
+            "threat_id": threat.threat_id,
+            "classification": res["classification"],
+            "risk_score": res["risk_score"],
+            "risk_level": res["risk_level"]
+        })
+
     return res
 

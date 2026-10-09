@@ -13,6 +13,7 @@ from app.detectors.behavior_detector import behavior_detector
 from app.detectors.network_detector import network_detector
 from app.detectors.quishing_detector import quishing_detector
 from app.detectors.ai_generated_phishing_detector import ai_phishing_detector
+from app.detectors.steganography_detector import steganography_detector
 from app.risk.fusion_engine import fusion_engine
 from app.threat_intelligence.ioc_repo import ioc_repository
 
@@ -139,3 +140,36 @@ def test_ioc_repository_lookup():
     match = ioc_repository.check_match("185.220.101.5")
     assert match is not None
     assert match["threat_type"] == "Tor Exit Node / Brute Force"
+
+def test_steganography_detector_embedded_c2():
+    # Construct PNG with appended C2 URL past IEND chunk
+    clean_png = (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR\x00\x00\x00\x10\x00\x00\x00\x10\x08\x02\x00\x00\x00\x90\x91\x68\x36"
+        b"\x00\x00\x00\x00IEND\xae\x42\x60\x82"
+    )
+    stego_payload = b"\x00\x00\x00STEG_C2_PAYLOAD: http://bput-c2-tunnel.darknet-relay.top/beacon/exfil.php COMMAND=POLL"
+    carrier_bytes = clean_png + stego_payload
+
+    res = steganography_detector.analyze_image_bytes(carrier_bytes, filename="test_stego_carrier.png")
+    assert res["is_steganography"] is True
+    assert res["risk_score"] >= 80
+    assert res["risk_level"] in ["HIGH", "CRITICAL"]
+    assert len(res["recovered_urls"]) >= 1
+    assert "http://bput-c2-tunnel.darknet-relay.top/beacon/exfil.php" in res["recovered_urls"]
+    assert res["forensic_details"]["eof_overlay_detected"] is True
+    assert len(res["mitre_mappings"]) >= 1
+
+def test_steganography_detector_clean_image():
+    clean_png = (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR\x00\x00\x00\x10\x00\x00\x00\x10\x08\x02\x00\x00\x00\x90\x91\x68\x36"
+        b"\x00\x00\x00\x00IEND\xae\x42\x60\x82"
+    )
+    res = steganography_detector.analyze_image_bytes(clean_png, filename="clean_image.png")
+    assert res["is_steganography"] is False
+    assert res["risk_score"] <= 30
+    assert res["risk_level"] in ["SAFE", "LOW"]
+    assert res["forensic_details"]["eof_overlay_detected"] is False
+    assert len(res["recovered_urls"]) == 0
+

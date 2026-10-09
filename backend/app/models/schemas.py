@@ -125,6 +125,20 @@ class DeepfakeAnalysisOutput(BaseModel):
     forensic_details: dict[str, Any] = Field(default_factory=dict)
     recommended_actions: list[str] = Field(default_factory=list)
 
+class SteganographyAnalysisOutput(BaseModel):
+    is_steganography: bool
+    classification: str
+    risk_score: int
+    risk_level: str
+    confidence: float
+    recovered_urls: list[str] = Field(default_factory=list)
+    indicators: list[str] = Field(default_factory=list)
+    explanation: str
+    recommended_actions: list[str] = Field(default_factory=list)
+    forensic_details: dict[str, Any] = Field(default_factory=dict)
+    mitre_mappings: list[dict[str, str]] = Field(default_factory=list)
+    url_analyses: list[dict[str, Any]] = Field(default_factory=list)
+
 # --- Threat Database Schema ---
 class ThreatResponse(BaseModel):
     id: int

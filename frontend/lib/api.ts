@@ -183,6 +183,17 @@ export async function analyzeGenAI(text: string) {
   return res.json();
 }
 
+export async function analyzeSteganography(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/analyze/steganography`, {
+    method: "POST",
+    body: formData
+  });
+  if (!res.ok) throw new Error("Failed to analyze image steganography");
+  return res.json();
+}
+
 
 export async function fetchIOCs() {
   const res = await fetch(`${API_BASE}/intelligence/iocs`);
